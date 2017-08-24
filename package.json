@@ -1,0 +1,21 @@
+{
+  "name": "slack-music-bot-react-express",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./app.js",
+    "heroku-postbuild": "cd client && yarn --production=false && yarn run build"
+  },
+  "dependencies": {
+    "body-parser": "~1.17.1",
+    "cookie-parser": "~1.4.3",
+    "debug": "~2.6.3",
+    "express": "~4.15.2",
+    "express-ws": "^3.0.0",
+    "jade": "~1.11.0",
+    "lodash": "^4.17.4",
+    "morgan": "~1.8.1",
+    "serve-favicon": "~2.4.2",
+    "slackbots": "^1.0.2"
+  }
+}
