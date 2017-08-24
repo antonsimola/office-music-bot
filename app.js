@@ -77,5 +77,5 @@ const isPrivateMessage = (event) => typeof event.channel === 'string' && event.c
 
 const isSentByMe = (event, myUser) => event.user === myUser.id;
 
-app.listen(3001, () => console.log("Running"));
+app.listen((process.env.PORT || 3001), () => console.log("Running"));
 module.exports = app;
