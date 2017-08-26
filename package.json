@@ -7,15 +7,19 @@
     "heroku-postbuild": "cd client && npm install --only=dev && npm install && npm run build"
   },
   "dependencies": {
+    "bluebird": "^3.5.0",
     "body-parser": "~1.17.1",
+    "botkit": "^0.5.7",
     "cookie-parser": "~1.4.3",
     "debug": "~2.6.3",
     "express": "~4.15.2",
-    "express-ws": "^3.0.0",
+    "googleapis": "^21.2.0",
     "jade": "~1.11.0",
     "lodash": "^4.17.4",
+    "mongoose": "^4.11.8",
     "morgan": "~1.8.1",
     "serve-favicon": "~2.4.2",
-    "slackbots": "^1.0.2"
+    "slackbots": "^1.0.2",
+    "socket.io": "^2.0.3"
   }
 }
