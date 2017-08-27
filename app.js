@@ -45,29 +45,41 @@ bot.startRTM((err, bot, payload) => {
 });
 
 
-let getSocket = () => {
+let sockets = [];
+let getSockets = () => {
     return {
-        emit: () => {
-            console.log('socket not established');
+        emit: (id, obj) => {
+            _.each(sockets, socket => socket.emit(id, obj));
         }
     }
 };
 
 const songQueue = require('./songqueue');
 
+controller.hears(/^(hi|hello|hey|yo|help)$/i, ['direct_message'], (bot, message) => {
+    bot.reply(message, 'Hello! Just send me a YouTube song URL and I will add it to the playlist!\n' +
+        'Other commands:\n' +
+        '- play\n' +
+        '- pause\n' +
+        '- volume 0..1\n' +
+        '- next: skip to next song\n' +
+        '- shuffle: shuffle the playlist\n' +
+        '- current: display currently playing song\n' +
+        '- search/find <search term> (not yet working)');
+});
+
 controller.hears(/^play$/i, ['direct_message'], (bot, message) => {
-    console.log(message);
-    getSocket().emit('playerStatus', true);
+    getSockets().emit('playerStatus', true);
     addReaction(bot, message, 'ok_hand');
 });
 
 controller.hears(/^(stop|pause)$/i, ['direct_message'], (bot, message) => {
-    getSocket().emit('playerStatus', false);
+    getSockets().emit('playerStatus', false);
     addReaction(bot, message, 'ok_hand');
 });
 
 controller.hears(/^next$/i, ['direct_message'], (bot, message) => {
-    songQueue.nextSong((song) => getSocket().emit('next', song));
+    songQueue.nextSong((song) => getSockets().emit('next', song));
     addReaction(bot, message, 'ok_hand');
 });
 
@@ -82,7 +94,7 @@ controller.hears(/^current/i, ['direct_message'], (bot, message) => {
 });
 
 controller.hears(/^volume (\d+([.,]\d+)?$)/i, ['direct_message'], (bot, message) => {
-    getSocket().emit('volume', Number(message.match[1]));
+    getSockets().emit('volume', Number(message.match[1]));
     addReaction(bot, message, 'ok_hand');
 });
 
@@ -179,14 +191,13 @@ app.get('*', (req, res) => {
 server.listen((process.env.PORT || 3001), (err, res) => console.log(`Server started.`));
 
 io.on('connection', (socket) => {
-    console.log('Socket.io connection established.');
-    socket.on('disconnect', () => console.log('disconnected'));
+    console.log('Socket.io connection established.' + socket.id);
+    socket.on('disconnect', (disconnectedSocket) => sockets = _.reject(sockets, (soc) => soc.id === socket.id));
+    socket.on('ping', () => socket.emit('pong'));
     socket.emit('playerStatus', true);
     socket.on('getNext', () => {
         songQueue.nextSong((song) => socket.emit('next', song));
     });
     songQueue.nextSong((song) => socket.emit('next', song));
-    getSocket = () => {
-        return socket;
-    };
+    sockets.push(socket);
 });
