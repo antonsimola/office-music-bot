@@ -104,33 +104,72 @@ controller.hears(/^(search|find) (.+)/i, ['direct_message'], (bot, message) => {
 
     getFirstSearchResultBySearchTerm(searchTerm, (data) => {
         console.log(data);
-        const confirmationBox = {
-            'text': `Found: ${data.title} (${getYoutubeUrlFromId(data.id)})`,
-            attachments: [
+        bot.startConversation(message, (err, convo) => {
+            if (err) return;
+            convo.say(`Found: ${data.title} (${getYoutubeUrlFromId(data.id)})`);
+            convo.ask('Add this song?', [
                 {
-                    title: 'Add this to playlist?',
-                    callback_id: '123',
-                    attachment_type: 'default',
-                    actions: [
-                        {
-                            "name": "yes",
-                            "text": _.sample(["Yes", "Yea", "Yup", "Yep", "Ya", "Sure", "OK", "Yeah", "Yah"]),
-                            "value": "yes",
-                            "style": "primary",
-                            "type": "button",
-                        },
-                        {
-                            "name": "no",
-                            "text": _.sample(["No", "Nah", "Nope"]),
-                            "style": "danger",
-                            "value": "no",
-                            "type": "button",
-                        }
-                    ]
+                    pattern: bot.utterances.yes,
+                    callback: (response, convo) => {
+                        // since no further messages are queued after this,
+                        // the conversation will end naturally with status == 'completed'
+                        convo.next();
+                    }
+                },
+                {
+                    pattern: bot.utterances.no,
+                    callback: (response, convo) => {
+                        // stop the conversation. this will cause it to end with status == 'stopped'
+                        convo.stop();
+                    }
+                },
+                {
+                    default: true,
+                    callback: (response, convo) => {
+                        convo.repeat();
+                        convo.next();
+                    }
                 }
-            ],
-        };
-        bot.reply(message, confirmationBox);
+            ]);
+
+            convo.on('end', (convo) => {
+                if (convo.status === 'completed') {
+                    addSongToUser(bot, message, getYoutubeUrlFromId(data.id));
+                } else {
+                    bot.reply(message, 'OK, nevermind!');
+                }
+
+            });
+        });
+
+
+        // const confirmationBox = {
+        //     'text': `Found: ${data.title} (${getYoutubeUrlFromId(data.id)})`,
+        //     attachments: [
+        //         {
+        //             title: 'Add this to playlist?',
+        //             callback_id: '123',
+        //             attachment_type: 'default',
+        //             actions: [
+        //                 {
+        //                     "name": "yes",
+        //                     "text": _.sample(["Yes", "Yea", "Yup", "Yep", "Ya", "Sure", "OK", "Yeah", "Yah"]),
+        //                     "value": "yes",
+        //                     "style": "primary",
+        //                     "type": "button",
+        //                 },
+        //                 {
+        //                     "name": "no",
+        //                     "text": _.sample(["No", "Nah", "Nope"]),
+        //                     "style": "danger",
+        //                     "value": "no",
+        //                     "type": "button",
+        //                 }
+        //             ]
+        //         }
+        //     ],
+        // };
+        //bot.reply(message, confirmationBox);
     });
 });
 
@@ -144,15 +183,14 @@ const addReaction = (bot, message, reaction) => {
 };
 
 controller.hears(YOUTUBE_MATCHER, ['direct_message'], (bot, message) => {
-    const user = new User({
-        _id: message.user,
-        teamId: message.team
-    });
+    addSongToUser(bot, message, message.match[0]);
+});
+
+const addSongToUser = (bot, message, youtubeUrl) => {
     const query = {_id: message.user};
     const update = {};
     const options = {upsert: true, new: true, setDefaultsOnInsert: true};
     User.findOneAndUpdate(query, update, options).then(savedUser => {
-        const youtubeUrl = message.match[0];
         const id = getYoutubeIdFromUrl(youtubeUrl);
         const newSong = new Song({
             _id: id,
@@ -173,8 +211,7 @@ controller.hears(YOUTUBE_MATCHER, ['direct_message'], (bot, message) => {
             }
         });
     });
-});
-
+};
 
 // uncomment after placing your favicon in /public
 //app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
