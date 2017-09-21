@@ -57,15 +57,16 @@ let getSockets = () => {
 const songQueue = require('./songqueue');
 
 controller.hears(/^(hi|hello|hey|yo|help)$/i, ['direct_message'], (bot, message) => {
-    bot.reply(message, 'Hello! Just send me a YouTube song URL and I will add it to the playlist!\n' +
-        'Other commands:\n' +
-        '- play\n' +
-        '- pause\n' +
-        '- volume 0..1\n' +
-        '- next: skip to next song\n' +
-        '- shuffle: shuffle the playlist\n' +
-        '- current: display currently playing song\n' +
-        '- search/find <search term> (not yet working)');
+    bot.reply(message, `Hello! Just send me a YouTube song URL and I will add it to the playlist! 
+Other commands:
+- search/find <search term>: to search a song from YouTube.
+- play
+- pause
+- volume 0..1
+- next: skip to next song
+- shuffle: shuffle the playlist
+- current: display currently playing song`
+    );
 });
 
 controller.hears(/^play$/i, ['direct_message'], (bot, message) => {
