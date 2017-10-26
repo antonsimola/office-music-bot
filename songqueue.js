@@ -3,39 +3,23 @@ const _ = require('lodash');
 const youtubeHelper = require('./youtube-helper');
 
 let queue = [];
-
-const refreshPlaylist = (cb) => {
-    Song.find({}).then(songs => {
-        queue = _.shuffle(songs.map(song => youtubeHelper.getYoutubeUrlFromId(song._id)));
-        console.log('refreshed queue: ' + queue);
-        if (cb) {
-            cb(queue);
-        }
-    });
-};
-
-const moveFirstToLast = () => queue.push(queue.shift());
-
-
+let currentSong = {};
 const nextSong = (cb) => {
     if (!queue || queue.length === 0) {
-        refreshPlaylist(() => {
-            console.log(queue);
-            cb(queue[0]);
-        });
+        currentSong = {};
+        cb(currentSong);
     } else {
-        moveFirstToLast();
-        console.log(queue);
-        cb(queue[0]);
+        currentSong = queue.pop();
+        cb(currentSong);
     }
 };
 
-const addSong = (youtubeUrl) => {
-    queue.push(youtubeUrl);
+const addSong = (song) => {
+    queue.push(song);
 };
 
-const currentSong = () => {
-    return queue[0] || "No song";
+const getCurrentSong = () => {
+    return currentSong;
 };
 
-module.exports = {addSong, refreshPlaylist, nextSong, currentSong};
+module.exports = {addSong, nextSong, getCurrentSong};

@@ -8,7 +8,7 @@ const _ = require('lodash');
 const mongoose = require('mongoose');
 const Song = require('./song');
 const User = require('./user');
-const {getYoutubeIdFromUrl, getYoutubeUrlFromId, YOUTUBE_MATCHER, getFirstSearchResultBySearchTerm} = require('./youtube-helper');
+const {getYoutubeIdFromUrl, getTitleForYoutubeId, getYoutubeUrlFromId, YOUTUBE_MATCHER, getFirstSearchResultBySearchTerm, sanitizeYoutubeUrl} = require('./youtube-helper');
 
 
 mongoose.Promise = require('bluebird');
@@ -24,22 +24,11 @@ const slackConfig = {
     token: process.env.SLACK_BOT_TOKEN,
     clientId: process.env.SLACK_CLIENT_ID,
     clientSecret: process.env.SLACK_CLIENT_SECRET,
-    redirectUri: 'http://localhost:3000/oauth',
-    json_file_store: __dirname + '/.data/db/',
     scopes: ['bot']
 };
 
 const controller = Botkit.slackbot(slackConfig);
 const bot = controller.spawn(slackConfig);
-
-// controller.setupWebserver(process.env.port || 3002, function (err, webserver) {
-//     // set up web endpoints for oauth, receiving webhooks, etc.
-//     controller
-//         .createHomepageEndpoint(controller.webserver)
-//         .createOauthEndpoints(controller.webserver, function (err, req, res) {
-//         })
-//         .createWebhookEndpoints(controller.webserver);
-// });
 
 bot.startRTM((err, bot, payload) => {
 });
@@ -64,7 +53,6 @@ Other commands:
 - pause
 - volume 0..1
 - next: skip to next song
-- shuffle: shuffle the playlist
 - current: display currently playing song`
     );
 });
@@ -80,18 +68,25 @@ controller.hears(/^(stop|pause)$/i, ['direct_message'], (bot, message) => {
 });
 
 controller.hears(/^next$/i, ['direct_message'], (bot, message) => {
-    songQueue.nextSong((song) => getSockets().emit('next', song));
+    songQueue.nextSong((song) => getSockets().emit('next', song.url));
+    getSockets().emit('playerStatus', true);
     addReaction(bot, message, 'ok_hand');
 });
 
-controller.hears(/^shuffle$/i, ['direct_message'], (bot, message) => {
-    songQueue.refreshPlaylist();
-    addReaction(bot, message, 'ok_hand');
-});
+// controller.hears(/^shuffle$/i, ['direct_message'], (bot, message) => {
+//     songQueue.refreshPlaylist();
+//     addReaction(bot, message, 'ok_hand');
+// });
 
 controller.hears(/^current/i, ['direct_message'], (bot, message) => {
-    const song = songQueue.currentSong();
-    bot.reply(message, song);
+    const song = songQueue.getCurrentSong();
+    const title = song && song.url ? song.url : "No song playing right now :disappointed: Send me some songs to play!";
+    bot.reply(message, title);
+});
+
+controller.hears(/^queue/i, ['direct_message'], (bot, message) => {
+    const queue = songQueue.getQueue();
+    bot.reply(message, "TODO....");
 });
 
 controller.hears(/^volume (\d+([.,]\d+)?$)/i, ['direct_message'], (bot, message) => {
@@ -112,15 +107,12 @@ controller.hears(/^(search|find) (.+)/i, ['direct_message'], (bot, message) => {
                 {
                     pattern: bot.utterances.yes,
                     callback: (response, convo) => {
-                        // since no further messages are queued after this,
-                        // the conversation will end naturally with status == 'completed'
                         convo.next();
                     }
                 },
                 {
                     pattern: bot.utterances.no,
                     callback: (response, convo) => {
-                        // stop the conversation. this will cause it to end with status == 'stopped'
                         convo.stop();
                     }
                 },
@@ -132,45 +124,14 @@ controller.hears(/^(search|find) (.+)/i, ['direct_message'], (bot, message) => {
                     }
                 }
             ]);
-
             convo.on('end', (convo) => {
                 if (convo.status === 'completed') {
                     addSongToUser(bot, message, getYoutubeUrlFromId(data.id));
                 } else {
                     bot.reply(message, 'OK, nevermind!');
                 }
-
             });
         });
-
-
-        // const confirmationBox = {
-        //     'text': `Found: ${data.title} (${getYoutubeUrlFromId(data.id)})`,
-        //     attachments: [
-        //         {
-        //             title: 'Add this to playlist?',
-        //             callback_id: '123',
-        //             attachment_type: 'default',
-        //             actions: [
-        //                 {
-        //                     "name": "yes",
-        //                     "text": _.sample(["Yes", "Yea", "Yup", "Yep", "Ya", "Sure", "OK", "Yeah", "Yah"]),
-        //                     "value": "yes",
-        //                     "style": "primary",
-        //                     "type": "button",
-        //                 },
-        //                 {
-        //                     "name": "no",
-        //                     "text": _.sample(["No", "Nah", "Nope"]),
-        //                     "style": "danger",
-        //                     "value": "no",
-        //                     "type": "button",
-        //                 }
-        //             ]
-        //         }
-        //     ],
-        // };
-        //bot.reply(message, confirmationBox);
     });
 });
 
@@ -188,34 +149,31 @@ controller.hears(YOUTUBE_MATCHER, ['direct_message'], (bot, message) => {
 });
 
 const addSongToUser = (bot, message, youtubeUrl) => {
-    const query = {_id: message.user};
-    const update = {};
-    const options = {upsert: true, new: true, setDefaultsOnInsert: true};
-    User.findOneAndUpdate(query, update, options).then(savedUser => {
-        const id = getYoutubeIdFromUrl(youtubeUrl);
-        const newSong = new Song({
-            _id: id,
-            owner: savedUser
-        });
-        newSong.save().then(savedSong => {
-            songQueue.addSong(getYoutubeUrlFromId(savedSong._id));
-            bot.reply(message, 'Song added to playlist! :musical_note:');
-        }).catch(err => {
-            if (err.code === 11000) {
-                Song.findById(id).populate('owner').then(song => {
-                    bot.api.users.info({user: song.owner._id}, (err, res) => {
-                        bot.reply(message, `Song is already added by ${res.user.name}`);
-                    });
-                });
-            } else {
-                bot.reply(message, `Sorry, something went wrong :disappointed:`);
+    bot.api.users.info({user: message.user}, (error, response) => {
+        let {name, real_name} = response.user;
+        createSong(message.user, name, youtubeUrl, (song) => {
+            songQueue.addSong(song);
+            if (!songQueue.getCurrentSong().url) {
+                songQueue.nextSong((song) => getSockets().emit('next', song.url));
+                getSockets().emit('playerStatus', true);
             }
         });
     });
+    bot.reply(message, 'Song added to playlist! :musical_note:');
 };
 
-// uncomment after placing your favicon in /public
-//app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
+const createSong = (userId, name, youtubeUrl, cb) => {
+    const id = getYoutubeIdFromUrl(youtubeUrl);
+    const youtubeUrlSanitized = sanitizeYoutubeUrl(youtubeUrl);
+    cb({
+        name: name,
+        userId: userId,
+        id: id,
+        url: youtubeUrlSanitized,
+    });
+};
+
+
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: false}));
@@ -234,8 +192,9 @@ io.on('connection', (socket) => {
     socket.on('ping', () => socket.emit('pong'));
     socket.emit('playerStatus', true);
     socket.on('getNext', () => {
-        songQueue.nextSong((song) => socket.emit('next', song));
+        songQueue.nextSong((song) => socket.emit('next', song.url));
+        getSockets().emit('playerStatus', true);
     });
-    songQueue.nextSong((song) => socket.emit('next', song));
+    songQueue.nextSong((song) => socket.emit('next', song.url));
     sockets.push(socket);
 });

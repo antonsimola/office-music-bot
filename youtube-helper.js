@@ -4,6 +4,7 @@ const youtube = googleapis.youtube({
     version: 'v3',
     auth: process.env.YOUTUBE_API_KEY
 });
+const request = require('request');
 
 /**
  * Thanks to https://gist.github.com/takien/4077195
@@ -43,8 +44,22 @@ const getFirstSearchResultBySearchTerm = (searchTerm, cb) => {
     });
 };
 
-const getTitleForYoutubeId = (id, cb) => {
+const sanitizeYoutubeUrl = (youtubeUrl) => {
+    return getYoutubeUrlFromId(getYoutubeIdFromUrl(youtubeUrl));
+};
 
+const getTitleForYoutubeId = (id, cb) => {
+    const params = {part: 'snippet', id: id, key: process.env.YOUTUBE_API_KEY};
+    request({url: 'https://www.googleapis.com/youtube/v3/videos', qs: params}, (err, resp) => {
+        if (err) {
+            console.error('Error: ' + err);
+        }
+        const data = resp.body;
+        console.log(data);
+        const firstResult = _.head(data.items);
+        console.log(firstResult.snippet.title);
+        cb(firstResult.snippet.title);
+    });
 };
 
 
@@ -53,5 +68,6 @@ module.exports = {
     getYoutubeUrlFromId,
     YOUTUBE_MATCHER,
     getTitleForYoutubeId,
+    sanitizeYoutubeUrl,
     getFirstSearchResultBySearchTerm
 };
